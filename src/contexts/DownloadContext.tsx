@@ -7,7 +7,16 @@ import { M3U8Downloader, M3U8DownloadTask } from '@/lib/m3u8-downloader';
 interface DownloadContextType {
   downloader: M3U8Downloader;
   tasks: M3U8DownloadTask[];
-  addDownloadTask: (url: string, title: string, type?: 'TS' | 'MP4') => Promise<void>;
+  addDownloadTask: (
+    url: string,
+    title: string,
+    type?: 'TS' | 'MP4',
+    metadata?: {
+      source?: string;
+      videoId?: string;
+      episodeIndex?: number;
+    }
+  ) => Promise<void>;
   startTask: (taskId: string) => void;
   pauseTask: (taskId: string) => void;
   cancelTask: (taskId: string) => void;
@@ -62,9 +71,18 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
     },
   }));
 
-  const addDownloadTask = useCallback(async (url: string, title: string, type: 'TS' | 'MP4' = 'TS') => {
+  const addDownloadTask = useCallback(async (
+    url: string,
+    title: string,
+    type: 'TS' | 'MP4' = 'TS',
+    metadata?: {
+      source?: string;
+      videoId?: string;
+      episodeIndex?: number;
+    }
+  ) => {
     try {
-      const taskId = await downloader.createTask(url, title, type);
+      const taskId = await downloader.createTask(url, title, type, metadata);
 
       // 读取下载模式设置
       const downloadMode = typeof window !== 'undefined'
@@ -76,43 +94,59 @@ export function DownloadProvider({ children }: { children: React.ReactNode }) {
         try {
           const dbName = 'MoonTVPlus';
           const storeName = 'dirHandles';
-          const request = indexedDB.open(dbName, 1);
 
-          request.onupgradeneeded = (event) => {
-            const db = (event.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains(storeName)) {
-              db.createObjectStore(storeName);
-            }
-          };
+          // 使用 Promise 包装 IndexedDB 操作，确保在启动任务前完成
+          await new Promise<void>((resolve, reject) => {
+            const request = indexedDB.open(dbName, 1);
 
-          request.onsuccess = (event) => {
-            const db = (event.target as IDBOpenDBRequest).result;
-
-            // 检查 object store 是否存在
-            if (!db.objectStoreNames.contains(storeName)) {
-              console.warn('Object store 不存在，跳过读取');
-              db.close();
-              return;
-            }
-
-            const transaction = db.transaction([storeName], 'readonly');
-            const store = transaction.objectStore(storeName);
-            const getRequest = store.get('downloadDir');
-
-            getRequest.onsuccess = () => {
-              const dirHandle = getRequest.result as FileSystemDirectoryHandle | undefined;
-              if (dirHandle) {
-                // 更新任务的下载模式和目录句柄
-                const task = downloader.getTask(taskId);
-                if (task) {
-                  task.downloadMode = 'filesystem';
-                  task.filesystemDirHandle = dirHandle;
-                }
-              } else {
-                console.warn('未找到保存目录，使用浏览器下载模式');
+            request.onupgradeneeded = (event) => {
+              const db = (event.target as IDBOpenDBRequest).result;
+              if (!db.objectStoreNames.contains(storeName)) {
+                db.createObjectStore(storeName);
               }
             };
-          };
+
+            request.onsuccess = (event) => {
+              const db = (event.target as IDBOpenDBRequest).result;
+
+              // 检查 object store 是否存在
+              if (!db.objectStoreNames.contains(storeName)) {
+                console.warn('Object store 不存在，跳过读取');
+                db.close();
+                resolve();
+                return;
+              }
+
+              const transaction = db.transaction([storeName], 'readonly');
+              const store = transaction.objectStore(storeName);
+              const getRequest = store.get('downloadDir');
+
+              getRequest.onsuccess = () => {
+                const dirHandle = getRequest.result as FileSystemDirectoryHandle | undefined;
+                if (dirHandle) {
+                  // 更新任务的下载模式和目录句柄
+                  const task = downloader.getTask(taskId);
+                  if (task) {
+                    task.downloadMode = 'filesystem';
+                    task.filesystemDirHandle = dirHandle;
+                  }
+                } else {
+                  console.warn('未找到保存目录，使用浏览器下载模式');
+                }
+                db.close();
+                resolve();
+              };
+
+              getRequest.onerror = () => {
+                db.close();
+                reject(new Error('读取目录句柄失败'));
+              };
+            };
+
+            request.onerror = () => {
+              reject(new Error('打开 IndexedDB 失败'));
+            };
+          });
         } catch (error) {
           console.error('读取目录句柄失败:', error);
         }
