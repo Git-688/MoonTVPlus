@@ -160,6 +160,11 @@ export interface AdminConfig {
       Enabled: boolean;
       Cookie: string;
     };
+    Tianyi?: {
+      Enabled: boolean;
+      Account: string;
+      Password: string;
+    };
   };
   AIConfig?: {
     Enabled: boolean; // 是否启用AI问片功能

@@ -678,6 +678,11 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
         Enabled: false,
         Cookie: '',
       },
+      Tianyi: {
+        Enabled: false,
+        Account: '',
+        Password: '',
+      },
     };
   }
 
@@ -700,6 +705,14 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     adminConfig.NetDiskConfig.Baidu = {
       Enabled: false,
       Cookie: '',
+    };
+  }
+
+  if (!adminConfig.NetDiskConfig.Tianyi) {
+    adminConfig.NetDiskConfig.Tianyi = {
+      Enabled: false,
+      Account: '',
+      Password: '',
     };
   }
 

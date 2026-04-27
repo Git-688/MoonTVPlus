@@ -15,6 +15,7 @@ import {
   normalizeQuarkCookie,
   validateQuarkCookieReadable,
 } from '@/lib/netdisk/quark.client';
+import { normalizeTianyiAccount, normalizeTianyiPassword, validateTianyiCredentials } from '@/lib/netdisk/tianyi.client';
 
 export const runtime = 'nodejs';
 
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, Quark, Mobile, Baidu, provider } = body;
+    const { action, Quark, Mobile, Baidu, Tianyi, provider } = body;
     const adminConfig = await getConfig();
 
     if (action === 'save') {
@@ -54,6 +55,8 @@ export async function POST(request: NextRequest) {
         ? assertMobileAuthorizationHeaderSafe(Mobile.Authorization)
         : '';
       const normalizedBaiduCookie = Baidu?.Cookie ? assertBaiduCookieHeaderSafe(Baidu.Cookie) : '';
+      const normalizedTianyiAccount = Tianyi?.Account ? normalizeTianyiAccount(Tianyi.Account) : '';
+      const normalizedTianyiPassword = Tianyi?.Password ? normalizeTianyiPassword(Tianyi.Password) : '';
 
       adminConfig.NetDiskConfig = adminConfig.NetDiskConfig || {};
       adminConfig.NetDiskConfig.Quark = {
@@ -68,6 +71,11 @@ export async function POST(request: NextRequest) {
       adminConfig.NetDiskConfig.Baidu = {
         Enabled: Boolean(Baidu?.Enabled),
         Cookie: normalizedBaiduCookie,
+      };
+      adminConfig.NetDiskConfig.Tianyi = {
+        Enabled: Boolean(Tianyi?.Enabled),
+        Account: normalizedTianyiAccount,
+        Password: normalizedTianyiPassword,
       };
 
       await db.saveAdminConfig(adminConfig);
@@ -96,6 +104,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: true,
           message: '百度网盘 Cookie 格式正常',
+        });
+      }
+      if (provider === 'tianyi') {
+        if (!Tianyi?.Account || !Tianyi?.Password) {
+          return NextResponse.json({ error: '请先填写天翼云盘账号和密码' }, { status: 400 });
+        }
+        await validateTianyiCredentials(
+          normalizeTianyiAccount(Tianyi.Account),
+          normalizeTianyiPassword(Tianyi.Password)
+        );
+        return NextResponse.json({
+          success: true,
+          message: '天翼云盘账号密码可用',
         });
       }
 

@@ -3708,6 +3708,9 @@ const NetDiskConfigComponent = ({
   const [mobileAuthorization, setMobileAuthorization] = useState('');
   const [baiduEnabled, setBaiduEnabled] = useState(false);
   const [baiduCookie, setBaiduCookie] = useState('');
+  const [tianyiEnabled, setTianyiEnabled] = useState(false);
+  const [tianyiAccount, setTianyiAccount] = useState('');
+  const [tianyiPassword, setTianyiPassword] = useState('');
 
   useEffect(() => {
     const quark = config?.NetDiskConfig?.Quark;
@@ -3719,6 +3722,9 @@ const NetDiskConfigComponent = ({
     setMobileAuthorization(mobile?.Authorization || '');
     setBaiduEnabled(config?.NetDiskConfig?.Baidu?.Enabled || false);
     setBaiduCookie(config?.NetDiskConfig?.Baidu?.Cookie || '');
+    setTianyiEnabled(config?.NetDiskConfig?.Tianyi?.Enabled || false);
+    setTianyiAccount(config?.NetDiskConfig?.Tianyi?.Account || '');
+    setTianyiPassword(config?.NetDiskConfig?.Tianyi?.Password || '');
   }, [config]);
 
   const handleSave = async () => {
@@ -3740,6 +3746,11 @@ const NetDiskConfigComponent = ({
           Baidu: {
             Enabled: baiduEnabled,
             Cookie: baiduCookie,
+          },
+          Tianyi: {
+            Enabled: tianyiEnabled,
+            Account: tianyiAccount,
+            Password: tianyiPassword,
           },
         }),
       });
@@ -3831,6 +3842,35 @@ const NetDiskConfigComponent = ({
         }
 
         showSuccess(data.message || '百度网盘 Cookie 格式正常', showAlert);
+      } catch (error) {
+        showError(error instanceof Error ? error.message : '校验失败', showAlert);
+        throw error;
+      }
+    });
+  };
+
+  const handleValidateTianyi = async () => {
+    await withLoading('validateTianyiNetDisk', async () => {
+      try {
+        const response = await fetch('/api/admin/netdisk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'validate',
+            provider: 'tianyi',
+            Tianyi: {
+              Account: tianyiAccount,
+              Password: tianyiPassword,
+            },
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || '校验失败');
+        }
+
+        showSuccess(data.message || '天翼云盘账号密码可用', showAlert);
       } catch (error) {
         showError(error instanceof Error ? error.message : '校验失败', showAlert);
         throw error;
@@ -4016,6 +4056,82 @@ const NetDiskConfigComponent = ({
               className={buttonStyles.primary}
             >
               {isLoading('validateBaiduNetDisk') ? '校验中...' : '校验百度网盘 Cookie'}
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isLoading('saveNetDisk')}
+              className={buttonStyles.success}
+            >
+              {isLoading('saveNetDisk') ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+        </div>
+      </details>
+
+      <details className='pt-4 border-t border-gray-200 dark:border-gray-700'>
+        <summary className='text-sm font-semibold text-gray-900 dark:text-gray-100 cursor-pointer'>
+          天翼云盘
+        </summary>
+        <div className='mt-4 space-y-4'>
+          <div className='rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300'>
+            使用天翼云盘前，请先关闭账号的设备锁，否则可能无法登录。
+          </div>
+
+          <div className='flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700'>
+            <div>
+              <h3 className='text-sm font-medium text-gray-900 dark:text-gray-100'>
+                启用天翼云盘
+              </h3>
+              <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                开启后，网盘搜索中的天翼云盘资源会显示“立即播放”按钮
+              </p>
+            </div>
+            <label className='relative inline-flex items-center cursor-pointer'>
+              <input
+                type='checkbox'
+                checked={tianyiEnabled}
+                onChange={(e) => setTianyiEnabled(e.target.checked)}
+                className='sr-only peer'
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 dark:peer-focus:ring-red-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-red-600"></div>
+            </label>
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              账号
+            </label>
+            <input
+              type='text'
+              value={tianyiAccount}
+              onChange={(e) => setTianyiAccount(e.target.value)}
+              disabled={!tianyiEnabled}
+              placeholder='手机号 / 邮箱 / 天翼账号'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+          </div>
+
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2'>
+              密码
+            </label>
+            <input
+              type='password'
+              value={tianyiPassword}
+              onChange={(e) => setTianyiPassword(e.target.value)}
+              disabled={!tianyiEnabled}
+              placeholder='输入天翼云盘密码'
+              className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed'
+            />
+          </div>
+
+          <div className='flex gap-3'>
+            <button
+              onClick={handleValidateTianyi}
+              disabled={!tianyiEnabled || !tianyiAccount || !tianyiPassword || isLoading('validateTianyiNetDisk')}
+              className={buttonStyles.primary}
+            >
+              {isLoading('validateTianyiNetDisk') ? '校验中...' : '校验天翼云盘账号密码'}
             </button>
             <button
               onClick={handleSave}

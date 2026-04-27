@@ -24,7 +24,13 @@ import {
   parseQuarkNetdiskId,
   refreshQuarkNetdiskSession,
 } from '@/lib/netdisk/quark-session-cache';
-import { LEGACY_QUARK_TEMP_SOURCE, NETDISK_BAIDU_SOURCE, NETDISK_MOBILE_SOURCE, NETDISK_QUARK_SOURCE, normalizeNetdiskSource } from '@/lib/netdisk/source';
+import {
+  createTianyiNetdiskSession,
+  getTianyiNetdiskSession,
+  parseTianyiNetdiskId,
+  refreshTianyiNetdiskSession,
+} from '@/lib/netdisk/tianyi-session-cache';
+import { LEGACY_QUARK_TEMP_SOURCE, NETDISK_BAIDU_SOURCE, NETDISK_MOBILE_SOURCE, NETDISK_QUARK_SOURCE, NETDISK_TIANYI_SOURCE, normalizeNetdiskSource } from '@/lib/netdisk/source';
 import {
   executeSavedSourceScript,
   normalizeScriptDetailResult,
@@ -424,6 +430,84 @@ export async function GET(request: NextRequest) {
         desc: `百度网盘分享：${baiduSession.shareUrl}`,
         episodes: parsedFiles.map((file) => (
           `/api/netdisk/baidu/play?id=${encodeURIComponent(baiduSession.id)}&episodeIndex=${file.originalIndex}`
+        )),
+        episodes_titles: parsedFiles.map((file) => file.displayTitle),
+        proxyMode: false,
+      });
+    } catch (error) {
+      return NextResponse.json(
+        { error: (error as Error).message },
+        { status: 500 }
+      );
+    }
+  }
+
+  if (sourceCode === NETDISK_TIANYI_SOURCE) {
+    try {
+      const config = await getConfig();
+      const tianyiConfig = config.NetDiskConfig?.Tianyi;
+      if (!tianyiConfig?.Enabled || !tianyiConfig.Account || !tianyiConfig.Password) {
+        throw new Error('天翼云盘未配置或未启用');
+      }
+
+      let session = refreshTianyiNetdiskSession(id) || getTianyiNetdiskSession(id);
+      if (!session) {
+        const payload = parseTianyiNetdiskId(id);
+        const { listTianyiShareVideos } = await import('@/lib/netdisk/tianyi.client');
+        const result = await listTianyiShareVideos(
+          payload.shareUrl,
+          tianyiConfig.Account,
+          tianyiConfig.Password,
+          payload.passcode || ''
+        );
+        session = createTianyiNetdiskSession({
+          title: title || result.title,
+          shareUrl: payload.shareUrl,
+          passcode: payload.passcode,
+          shareId: result.shareId,
+          shareMode: result.shareMode,
+          isFolder: result.isFolder,
+          accessCode: result.accessCode,
+          files: result.files,
+        });
+      }
+      if (!session) {
+        throw new Error('天翼云盘播放信息恢复失败');
+      }
+
+      const tianyiSession = session;
+      const { parseVideoFileName } = await import('@/lib/video-parser');
+      const parsedFiles = tianyiSession.files
+        .map((file, index) => {
+          const parsed = parseVideoFileName(file.name);
+          return {
+            ...file,
+            originalIndex: index,
+            sortEpisode: parsed.episode || index + 1,
+            isOVA: parsed.isOVA,
+            displayTitle:
+              parsed.title || (parsed.episode ? `第${parsed.episode}集` : file.name),
+          };
+        })
+        .sort((a, b) => {
+          if (a.isOVA && !b.isOVA) return 1;
+          if (!a.isOVA && b.isOVA) return -1;
+          return a.sortEpisode !== b.sortEpisode
+            ? a.sortEpisode - b.sortEpisode
+            : a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true, sensitivity: 'base' });
+        });
+
+      return NextResponse.json({
+        source: NETDISK_TIANYI_SOURCE,
+        source_name: '天翼云盘',
+        id: tianyiSession.id,
+        title: title || tianyiSession.title,
+        poster: '',
+        year: '',
+        douban_id: 0,
+        desc: `天翼云盘分享：${tianyiSession.shareUrl}`,
+        episodes: parsedFiles.map((file) => (
+          `/api/netdisk/tianyi/play?id=${encodeURIComponent(tianyiSession.id)}&episodeIndex=${file.originalIndex}`
         )),
         episodes_titles: parsedFiles.map((file) => file.displayTitle),
         proxyMode: false,
